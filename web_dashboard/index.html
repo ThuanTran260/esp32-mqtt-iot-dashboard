@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 IoT System Dashboard | Mosquitto MQTT</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+</head>
+<body>
+  <div class="app-layout">
+
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+      <div class="header-branding">
+        <div class="header-icon">⚡</div>
+        <div>
+          <h1 class="header-title">ESP32 IoT System Dashboard</h1>
+          <p class="header-subtitle">Real-Time Telemetry &amp; Actuator Control (Mosquitto MQTT)</p>
+        </div>
+      </div>
+      <div class="header-status-group">
+        <!-- ESP32 Device LWT Liveness Status -->
+        <div id="device-status" class="badge device-offline" title="ESP32 LWT Status (sensor/status)">
+          <span class="status-indicator"></span>
+          <span class="badge-label">ESP32: Offline</span>
+        </div>
+        <!-- Mosquitto WebSocket Connection Status Badge (F18) -->
+        <div id="status-badge" class="badge status-badge status-disconnected" title="Mosquitto WebSocket Connection Status">
+          <span class="status-indicator"></span>
+          <span class="badge-label">Disconnected (ws://localhost:9001)</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="dashboard-grid">
+
+      <!-- SECTION 1: DUAL DYNAMIC SVG GAUGES -->
+      <section class="card telemetry-card" aria-labelledby="telemetry-heading">
+        <div class="card-header">
+          <h2 id="telemetry-heading" class="card-title">Environmental Telemetry</h2>
+          <span class="topic-tag">sensor/data</span>
+        </div>
+        <div class="gauges-container">
+
+          <!-- Temperature Gauge Card (F15) -->
+          <div id="temp-gauge" class="gauge-card">
+            <h3 class="gauge-title">Temperature</h3>
+            <div class="gauge-svg-wrapper">
+              <svg class="gauge-svg" viewBox="0 0 200 200" width="100%" height="100%" aria-label="Temperature Gauge: -10°C to 60°C">
+                <defs>
+                  <linearGradient id="temp-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#38bdf8" />
+                    <stop offset="25%" stop-color="#06b6d4" />
+                    <stop offset="50%" stop-color="#10b981" />
+                    <stop offset="75%" stop-color="#f59e0b" />
+                    <stop offset="100%" stop-color="#ef4444" />
+                  </linearGradient>
+                </defs>
+                <!-- Inactive Track (240 deg sweep) -->
+                <circle class="gauge-bg" cx="100" cy="100" r="80" />
+                <!-- Dynamic Value Meter Arc -->
+                <circle id="temp-arc" class="gauge-meter temp-meter" cx="100" cy="100" r="80" />
+                <!-- Center Numeric Readout -->
+                <text id="temp-value" class="gauge-value" x="100" y="105">--.- °C</text>
+                <text class="gauge-unit" x="100" y="125">°C</text>
+              </svg>
+            </div>
+            <!-- Range & Scale Metadata (-10°C to 60°C) -->
+            <div class="gauge-scale">
+              <span class="scale-min">-10 °C</span>
+              <span class="scale-hint">Span: 70°C</span>
+              <span class="scale-max">60 °C</span>
+            </div>
+          </div>
+
+          <!-- Humidity Gauge Card (F16) -->
+          <div id="hum-gauge" class="gauge-card">
+            <h3 class="gauge-title">Relative Humidity</h3>
+            <div class="gauge-svg-wrapper">
+              <svg class="gauge-svg" viewBox="0 0 200 200" width="100%" height="100%" aria-label="Humidity Gauge: 0% to 100%">
+                <defs>
+                  <linearGradient id="hum-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#f59e0b" />
+                    <stop offset="40%" stop-color="#10b981" />
+                    <stop offset="75%" stop-color="#3b82f6" />
+                    <stop offset="100%" stop-color="#8b5cf6" />
+                  </linearGradient>
+                </defs>
+                <!-- Inactive Track (240 deg sweep) -->
+                <circle class="gauge-bg" cx="100" cy="100" r="80" />
+                <!-- Dynamic Value Meter Arc -->
+                <circle id="hum-arc" class="gauge-meter hum-meter" cx="100" cy="100" r="80" />
+                <!-- Center Numeric Readout -->
+                <text id="hum-value" class="gauge-value" x="100" y="105">--.- %</text>
+                <text class="gauge-unit" x="100" y="125">%</text>
+              </svg>
+            </div>
+            <!-- Range & Scale Metadata (0% to 100%) -->
+            <div class="gauge-scale">
+              <span class="scale-min">0 %</span>
+              <span class="scale-hint">Span: 100%</span>
+              <span class="scale-max">100 %</span>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- SECTION 2: INTERACTIVE ACTUATOR CONTROL (F17) -->
+      <section class="card actuator-card" aria-labelledby="actuator-heading">
+        <div class="card-header">
+          <h2 id="actuator-heading" class="card-title">Actuator Control</h2>
+          <span class="topic-tag">sensor/led</span>
+        </div>
+        <div id="led-switch" class="actuator-body">
+          <!-- Virtual Physical LED Indicator -->
+          <div class="virtual-led-container">
+            <div id="led-indicator" class="led-lamp led-off" aria-hidden="true"></div>
+            <div class="led-info">
+              <span id="led-status-text" class="led-label">LED: OFF</span>
+              <span class="led-subtext">ESP32 GPIO 4 (220Ω Resistor)</span>
+            </div>
+          </div>
+
+          <!-- Tactile Accessible Switch Control -->
+          <div class="switch-control-group">
+            <label class="switch" for="led-toggle" aria-label="Toggle ESP32 LED On or Off">
+              <input type="checkbox" id="led-toggle" role="switch" aria-checked="false">
+              <span class="slider round"></span>
+            </label>
+            <span class="switch-hint">Click switch to toggle</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 3: REAL-TIME MQTT MESSAGE LOG TABLE (F19) -->
+      <section id="message-log" class="card log-card" aria-labelledby="log-heading">
+        <div class="card-header">
+          <div class="card-header-left">
+            <h2 id="log-heading" class="card-title">MQTT Live Message Stream</h2>
+            <span class="badge counter-badge">Buffer: max 50</span>
+          </div>
+          <div class="card-header-actions">
+            <button type="button" id="clear-log-btn" class="btn btn-sm btn-outline" title="Clear message log table">Clear Log</button>
+          </div>
+        </div>
+
+        <!-- Scrollable Table Wrapper -->
+        <div class="table-wrapper" tabindex="0" role="region" aria-label="MQTT Message Log">
+          <table id="log-table" class="log-table">
+            <thead>
+              <tr>
+                <th scope="col" style="width: 120px;">Time</th>
+                <th scope="col" style="width: 80px;">Direction</th>
+                <th scope="col" style="width: 150px;">Topic</th>
+                <th scope="col">Payload</th>
+              </tr>
+            </thead>
+            <tbody id="log-body">
+              <tr id="empty-log-row">
+                <td colspan="4" class="empty-log-cell">
+                  <div class="empty-state">
+                    <span class="empty-icon">📡</span>
+                    <span>Waiting for MQTT traffic on <code>ws://localhost:9001</code>...</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="log-footer">
+          <span class="log-info-note">Buffer capacity: Maximum 50 messages (FIFO rolling buffer prevents memory leaks).</span>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- System Footer -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <span>Broker: <code>ws://localhost:9001</code> (Auth: <code>user1</code>)</span>
+        <span>Topics: <code>sensor/data</code>, <code>sensor/led</code>, <code>sensor/status</code></span>
+        <span>SGU Network Programming Lab — ESP32 Wokwi + Mosquitto</span>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- VENDORED MQTT CLIENT WITH CDN FALLBACK (F20) -->
+  <script src="js/mqtt.min.js"></script>
+  <script>
+    if (typeof mqtt === 'undefined') {
+      console.warn("Local js/mqtt.min.js not found. Loading CDN fallback...");
+      document.write('<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"><\/script>');
+    }
+  </script>
+
+  <!-- Application Logic (F13, F14) -->
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+*.env.local
+
+# IDE / Editor
+.vscode/
+.idea/
+*.sublime-workspace
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs & temp
+*.log
+
+# Agent workspace metadata & internal orchestration
+.agents/
