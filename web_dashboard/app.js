@@ -28,7 +28,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // =========================================================================
   // 2. MQTT Client Initialization & Options
   // =========================================================================
-  const BROKER_URL = "ws://localhost:9001";
+  // Cloud broker enabled for seamless Wokwi free simulation (no paid gateway needed)
+  // Set USE_PUBLIC_BROKER = false to switch back to local Mosquitto (port 9001)
+  const USE_PUBLIC_BROKER = true;
+  const BROKER_URL = USE_PUBLIC_BROKER ? "wss://broker.hivemq.com:8884/mqtt" : "ws://localhost:9001";
+  const TOPIC_PREFIX = "thuantran260/";
   const MQTT_OPTIONS = {
     clientId: "web_dashboard_" + Math.random().toString(16).substring(2, 10),
     username: "user1",
@@ -100,6 +104,13 @@ document.addEventListener("DOMContentLoaded", () => {
     client.subscribe("sensor/status", { qos: 1 }, (err) => {
       if (err) console.error("Failed to subscribe to sensor/status:", err);
     });
+
+    // Cloud private namespace subscriptions
+    if (TOPIC_PREFIX) {
+      client.subscribe(TOPIC_PREFIX + "sensor/data", { qos: 0 });
+      client.subscribe(TOPIC_PREFIX + "sensor/led", { qos: 0 });
+      client.subscribe(TOPIC_PREFIX + "sensor/status", { qos: 1 });
+    }
   });
 
   client.on("reconnect", () => {
@@ -126,7 +137,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const payload = message.toString();
     addMessageToLog("RX", topic, payload);
 
-    if (topic === "sensor/data") {
+    if (topic === "sensor/data" || topic === TOPIC_PREFIX + "sensor/data") {
+      updateDeviceStatus("ONLINE");
       try {
         const data = JSON.parse(payload);
         if (data && typeof data === "object") {
@@ -140,12 +152,12 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (err) {
         console.warn("JSON parse error on sensor/data:", payload, err);
       }
-    } else if (topic === "sensor/led") {
+    } else if (topic === "sensor/led" || topic === TOPIC_PREFIX + "sensor/led") {
       const state = payload.trim().toUpperCase();
       if (state === "ON" || state === "OFF") {
         syncLedSwitch(state === "ON");
       }
-    } else if (topic === "sensor/status") {
+    } else if (topic === "sensor/status" || topic === TOPIC_PREFIX + "sensor/status") {
       const status = payload.trim().toUpperCase();
       updateDeviceStatus(status);
     }
@@ -209,8 +221,10 @@ document.addEventListener("DOMContentLoaded", () => {
     ledToggle.addEventListener("change", () => {
       const command = ledToggle.checked ? "ON" : "OFF";
       if (client && client.connected) {
+        const pubTopic = TOPIC_PREFIX ? (TOPIC_PREFIX + "sensor/led") : "sensor/led";
+        client.publish(pubTopic, command, { qos: 0 });
         client.publish("sensor/led", command, { qos: 0 });
-        addMessageToLog("TX", "sensor/led", command);
+        addMessageToLog("TX", pubTopic, command);
       } else {
         console.warn("MQTT client offline. Cannot publish command:", command);
       }

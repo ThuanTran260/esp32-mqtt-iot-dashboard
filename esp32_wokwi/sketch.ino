@@ -9,14 +9,14 @@
 const char* ssid = "Wokwi-GUEST";
 const char* password = "";
 
-const char* mqtt_server = "host.wokwi";
+const char* mqtt_server = "broker.hivemq.com";
 const int mqtt_port = 1883;
 const char* mqtt_user = "user1";
 const char* mqtt_pass = "123456";
 
-const char* topic_data = "sensor/data";
-const char* topic_led = "sensor/led";
-const char* topic_status = "sensor/status";
+const char* topic_data = "thuantran260/sensor/data";
+const char* topic_led = "thuantran260/sensor/led";
+const char* topic_status = "thuantran260/sensor/status";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -37,7 +37,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("]: ");
   Serial.println(msg);
 
-  if (String(topic) == "sensor/led") {
+  if (String(topic) == topic_led || String(topic) == "sensor/led") {
     if (msg.equalsIgnoreCase("ON") || msg == "1") {
       digitalWrite(LEDPIN, HIGH);
       Serial.println("LED turned ON (HIGH)");
@@ -59,9 +59,11 @@ void reconnect() {
 
     String clientId = "ESP32Client-" + String(random(0xffff), HEX);
 
-    if (client.connect(clientId.c_str(), mqtt_user, mqtt_pass, "sensor/status", 1, true, "OFFLINE")) {
-      Serial.println("connected!");
+    if (client.connect(clientId.c_str(), mqtt_user, mqtt_pass, topic_status, 1, true, "OFFLINE")) {
+      Serial.println("connected to HiveMQ!");
+      client.publish(topic_status, "ONLINE", true);
       client.publish("sensor/status", "ONLINE", true);
+      client.subscribe(topic_led);
       client.subscribe("sensor/led");
     } else {
       Serial.print("failed, rc=");
@@ -139,6 +141,9 @@ void loop() {
     Serial.print("Publishing to sensor/data: ");
     Serial.println(buffer);
 
+    client.publish(topic_data, buffer);
     client.publish("sensor/data", buffer);
+    client.publish(topic_status, "ONLINE", true);
+    client.publish("sensor/status", "ONLINE", true);
   }
 }

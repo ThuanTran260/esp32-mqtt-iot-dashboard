@@ -20,5 +20,10 @@ desktop.ini
 # Logs & temp
 *.log
 
+# PlatformIO build artifacts & Wokwi tools
+.pio/
+wokwi.lic
+wokwigw.exe
+
 # Agent workspace metadata & internal orchestration
 .agents/

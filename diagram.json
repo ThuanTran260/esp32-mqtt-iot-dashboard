@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "author": "SGU IoT Lab",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-dht22", "id": "dht", "top": -140, "left": -80, "attrs": { "temperature": "25", "humidity": "60" } },
+    { "type": "wokwi-led", "id": "led", "top": -140, "left": 100, "attrs": { "color": "red" } },
+    { "type": "wokwi-resistor", "id": "res", "top": -60, "left": 100, "attrs": { "value": "220" } }
+  ],
+  "connections": [
+    [ "dht:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "dht:SDA", "esp:RX2", "green", [ "v0" ] ],
+    [ "dht:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "esp:D4", "led:A", "green", [ "h0" ] ],
+    [ "led:C", "res:1", "red", [ "v0" ] ],
+    [ "res:2", "esp:GND.2", "black", [ "v0" ] ]
+  ],
+  "dependencies": {}
+}
