@@ -151,8 +151,8 @@ class TestTier3Interactions(unittest.TestCase):
         diagram_parser = WokwiDiagramParser(WOKWI_DIAGRAM)
         sketch_parser = SketchInoParser(WOKWI_SKETCH)
 
-        # Diagram connects GPIO 16 to DHT22
-        has_wire_16 = diagram_parser.has_connection(r":16\b|:D16\b", r":SDA\b|:data\b")
+        # Diagram connects GPIO 16 to DHT22 (on wokwi-esp32-devkit-v1, GPIO 16 is labeled RX2)
+        has_wire_16 = diagram_parser.has_connection(r":16\b|:D16\b|:RX2\b", r":SDA\b|:data\b")
         self.assertTrue(has_wire_16, "diagram.json must wire GPIO 16 to DHT22 data")
 
         # Sketch specifies GPIO 16

@@ -259,8 +259,8 @@ class TestTier1FeatureCoverage(unittest.TestCase):
     def test_f06_05_wiring_connections(self):
         """F6-5: Verify GPIO 16 connects to DHT22 data pin and GPIO 4 connects to LED anode."""
         parser = WokwiDiagramParser(WOKWI_DIAGRAM)
-        # Check DHT22 connection to GPIO 16
-        has_dht_conn = parser.has_connection(r":16\b|:D16\b", r":SDA\b|:data\b")
+        # Check DHT22 connection to GPIO 16 (on wokwi-esp32-devkit-v1, GPIO 16 is labeled RX2)
+        has_dht_conn = parser.has_connection(r":16\b|:D16\b|:RX2\b", r":SDA\b|:data\b")
         # Check LED connection to GPIO 4
         has_led_conn = parser.has_connection(r":4\b|:D4\b", r":A\b|:anode\b")
         self.assertTrue(has_dht_conn, "diagram.json must connect ESP32 GPIO 16 to DHT22 data pin")
