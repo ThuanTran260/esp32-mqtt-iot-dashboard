@@ -9,7 +9,14 @@
 const char* ssid = "Wokwi-GUEST";
 const char* password = "";
 
+// --- TEMPORARY SPIKE S0 (Wokwi TCP reachability) — remove after the spike ---
+// Only active in `pio run -e spike`; the default env never defines SPIKE_HOST.
+#ifdef SPIKE_HOST
+const char* mqtt_server = SPIKE_HOST;
+#else
 const char* mqtt_server = "broker.hivemq.com";
+#endif
+// --- END TEMPORARY SPIKE S0 ---
 const int mqtt_port = 1883;
 const char* mqtt_user = "user1";
 const char* mqtt_pass = "123456";
