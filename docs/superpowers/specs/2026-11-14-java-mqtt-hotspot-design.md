@@ -134,3 +134,7 @@ Bổ sung test socket thật và client Paho độc lập để tránh encoder/d
 - [Eclipse Paho Java](https://github.com/eclipse-paho/paho.mqtt.java): client Java độc lập với broker.
 - [Swing EDT](https://docs.oracle.com/javase/tutorial/uiswing/concurrency/dispatch.html): cập nhật UI theo event dispatch thread.
 - [Maven Java target](https://maven.apache.org/guides/mini/guide-java-target.html), [executable JAR](https://maven.apache.org/plugins/maven-shade-plugin/examples/executable-jar.html), [JUnit 5.13.4](https://docs.junit.org/5.13.4/release-notes/), [Gson 2.13.2](https://github.com/google/gson/releases/tag/gson-parent-2.13.2).
+
+## Sửa đổi phạm vi MVP (2026-11-14)
+
+Người dùng duyệt làm MVP trước. Phiên bản đầu **hoãn** các mục sau: QoS1 outbound (mọi subscription được cấp QoS0, PUBLISH QoS1 vào vẫn được PUBACK), pending ID, giới hạn 32 client, queue 256/pending 128, deadline gói tuyệt đối, chống slow client. Will và keepalive 1.5× vẫn bắt buộc. Trước khi viết firmware LAN phải có spike chứng minh Wokwi mở được TCP tới máy broker.

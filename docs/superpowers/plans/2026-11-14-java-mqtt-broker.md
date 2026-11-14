@@ -780,3 +780,14 @@ git commit -m "feat(java-broker): package LAN broker and configure Arduino clien
 ## Self-review của tài liệu
 
 Đã đối chiếu ràng buộc với A1–A6: framing/UTF-8/topic(A1,A2), auth/duplicate/deadline(A3), routing/retain(A4), QoS1/Will/backpressure(A5), LAN/config/firmware/package(A6). Các giới hạn MQTT giữ đúng spec; phạm vi clean-session được công bố thay vì giả hỗ trợ persistent session. Interface test fixture và production được định nghĩa trước nơi dùng. Những lệnh build/test trong tài liệu là kế hoạch, chưa được chạy cho code chưa tồn tại.
+
+## Sửa đổi phạm vi MVP (2026-11-14, người dùng duyệt)
+
+Người dùng chọn MVP trước. Khi thực thi, các mục sau **thay thế** nội dung tương ứng ở A3–A6; phần không nhắc tới giữ nguyên.
+
+- **S0 (mới, trước/ song song A1): spike Wokwi → TCP.** Chứng minh ESP32 giả lập mở được TCP tới (a) `host.wokwi.internal` trên máy Wokwi và (b) IPv4 hotspot của máy broker. Nếu (b) thất bại thì dừng và chọn phương án dự phòng trước khi làm A6.
+- **A3:** bỏ Semaphore 32, bỏ InputStream deadline tuyệt đối và clock injection. CONNECT deadline 10 s và keepalive 1.5× dùng `Socket.setSoTimeout`. Bỏ queue 256/OVERLOAD: mỗi session ghi socket qua một phương thức `synchronized send(Packet)`; router gọi `send` ngoài khóa router. Giữ auth, mã CONNACK, registry thay ClientId, CloseReason.
+- **A4:** thêm vào A4 phần của A5: PUBLISH QoS1 inbound → PUBACK; mọi SUBACK cấp QoS0 (hợp lệ theo MQTT 3.1.1); outbound luôn QoS0; Will gửi đúng một lần khi đóng không GRACEFUL (EOF, lỗi, keepalive, REPLACED). Test Will bằng Paho `disconnectForcibly`.
+- **A5:** hoãn toàn bộ (OutboundState, QoS1 outbound, pending ID, slow client). Không tạo OutboundState.java.
+- **A6:** bỏ profile packaged-smoke và PackagedBrokerTest; thay bằng bước thủ công trong report: `java -jar java-broker/target/java-broker-1.0-SNAPSHOT.jar --help` exit 0 và chạy thật với config rồi Paho/CLI connect. Phần firmware giữ nguyên.
+- Kiểm tra kết thúc: bỏ yêu cầu "A5 QoS1/slow client có evidence".
