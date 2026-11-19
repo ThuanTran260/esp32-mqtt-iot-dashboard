@@ -138,8 +138,9 @@ void loop() {
     }
 
     StaticJsonDocument<128> doc;
-    doc["temp"] = data.temperature;
-    doc["hum"] = data.humidity;
+    // Round in double: a float would serialize as 28.10000038 with ArduinoJson 6.
+    doc["temp"] = round(data.temperature * 10.0) / 10.0;
+    doc["hum"] = round(data.humidity * 10.0) / 10.0;
 
     char buffer[128];
     serializeJson(doc, buffer);

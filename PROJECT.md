@@ -17,7 +17,7 @@
 
 | Topic | Hướng | Payload |
 |---|---|---|
-| `sensor/data` | ESP32 -> client | `{"temp":28.5,"hum":65.0}` (số thật, chu kỳ 3000 ms) |
+| `sensor/data` | ESP32 -> client | `{"temp":28.5,"hum":65}` (số thật làm tròn 1 chữ số thập phân, chu kỳ 3000 ms) |
 | `sensor/led` | client -> ESP32 | `ON` / `OFF` (GPIO4) |
 | `sensor/status` | ESP32 -> client | `ONLINE` / `OFFLINE`, retained (`OFFLINE` là Will) |
 
