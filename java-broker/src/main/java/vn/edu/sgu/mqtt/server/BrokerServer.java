@@ -14,6 +14,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import vn.edu.sgu.mqtt.routing.RetainedStore;
+import vn.edu.sgu.mqtt.routing.SubscriptionRouter;
 import vn.edu.sgu.mqtt.server.ClientSession.CloseReason;
 
 /** TCP listener that hands each accepted socket to a {@link ClientSession} virtual thread. */
@@ -25,6 +27,7 @@ public final class BrokerServer implements AutoCloseable {
     private final BrokerConfig config;
     private final Duration connectTimeout;
     private final ClientRegistry registry = new ClientRegistry();
+    private final SubscriptionRouter router = new SubscriptionRouter(new RetainedStore());
     /** Every live session, including ones that have not authenticated yet. */
     private final Set<ClientSession> sessions = ConcurrentHashMap.newKeySet();
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
@@ -59,6 +62,11 @@ public final class BrokerServer implements AutoCloseable {
         workers.execute(() -> acceptLoop(listener));
     }
 
+    /** The router shared by every session (exposed for white-box tests). */
+    public SubscriptionRouter router() {
+        return router;
+    }
+
     /** The bound port (the real one when configured with port 0). */
     public int port() {
         return localPort;
@@ -79,7 +87,7 @@ public final class BrokerServer implements AutoCloseable {
     private void acceptConnection(Socket socket) {
         try {
             socket.setTcpNoDelay(true);
-            var session = new ClientSession(socket, config, registry, connectTimeout, sessions::remove);
+            var session = new ClientSession(socket, config, registry, connectTimeout, sessions::remove, router);
             sessions.add(session);
             if (closed.get()) {
                 session.close(CloseReason.SHUTDOWN); // raced with close(): sweep already ran

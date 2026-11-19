@@ -18,8 +18,10 @@ import vn.edu.sgu.mqtt.protocol.FrameCodec;
 import vn.edu.sgu.mqtt.protocol.MqttCodec;
 import vn.edu.sgu.mqtt.protocol.MqttMessages.Connect;
 import vn.edu.sgu.mqtt.protocol.MqttMessages.Publish;
+import vn.edu.sgu.mqtt.protocol.MqttMessages.Will;
 import vn.edu.sgu.mqtt.protocol.Packet;
 import vn.edu.sgu.mqtt.protocol.ProtocolException;
+import vn.edu.sgu.mqtt.routing.SubscriptionRouter;
 
 /**
  * One client connection: NEW (only CONNECT accepted) → CONNECTED → CLOSED.
@@ -42,6 +44,7 @@ public final class ClientSession implements Runnable, AutoCloseable {
     private final Socket socket;
     private final BrokerConfig config;
     private final ClientRegistry registry;
+    private final SubscriptionRouter router;
     private final Duration connectTimeout;
     private final Consumer<ClientSession> onClosed;
     private final AtomicBoolean closed = new AtomicBoolean();
@@ -49,18 +52,23 @@ public final class ClientSession implements Runnable, AutoCloseable {
     private volatile State state = State.NEW;
     private volatile CloseReason closeReason;
     private volatile String clientId;
+    private volatile Will will;         // captured from CONNECT, published on abnormal close
+    private volatile boolean accepted;  // true once CONNACK 0 was sent
     private OutputStream out; // guarded by this
 
-    public ClientSession(Socket socket, BrokerConfig config, ClientRegistry registry) {
-        this(socket, config, registry, DEFAULT_CONNECT_TIMEOUT, session -> { });
+    public ClientSession(Socket socket, BrokerConfig config, ClientRegistry registry,
+                         SubscriptionRouter router) {
+        this(socket, config, registry, DEFAULT_CONNECT_TIMEOUT, session -> { }, router);
     }
 
     /** Lets tests shorten the CONNECT deadline; {@code onClosed} runs once after cleanup. */
     ClientSession(Socket socket, BrokerConfig config, ClientRegistry registry,
-                  Duration connectTimeout, Consumer<ClientSession> onClosed) {
+                  Duration connectTimeout, Consumer<ClientSession> onClosed,
+                  SubscriptionRouter router) {
         this.socket = socket;
         this.config = config;
         this.registry = registry;
+        this.router = router;
         this.connectTimeout = connectTimeout;
         this.onClosed = onClosed;
     }
@@ -73,6 +81,10 @@ public final class ClientSession implements Runnable, AutoCloseable {
     /** Why the session closed, or null while it is open. */
     public CloseReason closeReason() {
         return closeReason;
+    }
+
+    public boolean isClosed() {
+        return closed.get();
     }
 
     // ------------------------------------------------------------------ outbound
@@ -148,9 +160,22 @@ public final class ClientSession implements Runnable, AutoCloseable {
                 MqttCodec.checkDisconnect(packet);
                 close(CloseReason.GRACEFUL);
             }
-            // CONNECT again, and (until the router lands) every other type, violate the protocol.
+            case MqttCodec.SUBSCRIBE ->
+                router.subscribe(this, MqttCodec.decodeSubscribe(packet));
+            case MqttCodec.UNSUBSCRIBE ->
+                router.unsubscribe(this, MqttCodec.decodeUnsubscribe(packet));
+            case MqttCodec.PUBLISH -> onPublish(packet);
+            // CONNECT again and every other type violate the protocol.
             default -> throw new ProtocolException("Unexpected packet type " + packet.type());
         }
+    }
+
+    private void onPublish(Packet packet) throws IOException {
+        Publish publish = MqttCodec.decodePublish(packet);
+        if (publish.qos() == 2) throw new ProtocolException("QoS 2 is not supported");
+        if (closed.get()) return; // no publications after close
+        router.route(publish);
+        if (publish.qos() == 1) send(MqttCodec.puback(publish.packetId()));
     }
 
     private void onConnect(Packet packet) throws IOException {
@@ -168,11 +193,13 @@ public final class ClientSession implements Runnable, AutoCloseable {
             return;
         }
         clientId = connect.clientId();
+        will = connect.will();
         state = State.CONNECTED;
         registry.register(clientId, this);
         int keepAlive = connect.keepAliveSeconds();
         socket.setSoTimeout(keepAlive == 0 ? 0 : keepAlive * 1500);
         send(MqttCodec.connack(0));
+        accepted = true;
     }
 
     private void rejectAndClose(int connackCode) {
@@ -214,7 +241,22 @@ public final class ClientSession implements Runnable, AutoCloseable {
         }
         String id = clientId;
         if (id != null) registry.remove(id, this);
+        router.remove(this);
+        publishWill(reason);
         onClosed.accept(this);
+    }
+
+    /** Runs at most once (guarded by the close CAS): any close except GRACEFUL sends the Will. */
+    private void publishWill(CloseReason reason) {
+        Will captured = will;
+        if (!accepted || captured == null || reason == CloseReason.GRACEFUL) return;
+        try {
+            router.route(new Publish(captured.topic(), captured.payload().clone(),
+                captured.qos(), captured.retain(), false, 0));
+        } catch (RuntimeException ex) {
+            LOG.log(Level.WARNING, "Publishing Will of {0} failed: {1}",
+                new Object[] {clientId, ex.toString()});
+        }
     }
 
     @Override

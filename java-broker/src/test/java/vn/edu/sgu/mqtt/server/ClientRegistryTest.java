@@ -16,7 +16,8 @@ class ClientRegistryTest {
     private final ClientRegistry registry = new ClientRegistry();
 
     private ClientSession session() {
-        return new ClientSession(new Socket(), config, registry);
+        return new ClientSession(new Socket(), config, registry,
+            new vn.edu.sgu.mqtt.routing.SubscriptionRouter(new vn.edu.sgu.mqtt.routing.RetainedStore()));
     }
 
     @Test
