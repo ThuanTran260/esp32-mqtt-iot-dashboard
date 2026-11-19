@@ -9,21 +9,20 @@
 const char* ssid = "Wokwi-GUEST";
 const char* password = "";
 
-// --- TEMPORARY SPIKE S0 (Wokwi TCP reachability) — remove after the spike ---
-// Only active in `pio run -e spike`; the default env never defines SPIKE_HOST.
-#ifdef SPIKE_HOST
-const char* mqtt_server = SPIKE_HOST;
+#if __has_include("broker_config.h")
+#include "broker_config.h"
 #else
-const char* mqtt_server = "broker.hivemq.com";
+#error "Copy esp32_wokwi/broker_config.example.h to esp32_wokwi/broker_config.h and set MQTT_BROKER_HOST"
 #endif
-// --- END TEMPORARY SPIKE S0 ---
-const int mqtt_port = 1883;
-const char* mqtt_user = "user1";
-const char* mqtt_pass = "123456";
 
-const char* topic_data = "thuantran260/sensor/data";
-const char* topic_led = "thuantran260/sensor/led";
-const char* topic_status = "thuantran260/sensor/status";
+const char* mqtt_server = MQTT_BROKER_HOST;
+const int mqtt_port = MQTT_BROKER_PORT;
+const char* mqtt_user = MQTT_USERNAME;
+const char* mqtt_pass = MQTT_PASSWORD;
+
+const char* topic_data = "sensor/data";
+const char* topic_led = "sensor/led";
+const char* topic_status = "sensor/status";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -44,7 +43,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("]: ");
   Serial.println(msg);
 
-  if (String(topic) == topic_led || String(topic) == "sensor/led") {
+  if (String(topic) == topic_led) {
     if (msg.equalsIgnoreCase("ON") || msg == "1") {
       digitalWrite(LEDPIN, HIGH);
       Serial.println("LED turned ON (HIGH)");
@@ -67,11 +66,9 @@ void reconnect() {
     String clientId = "ESP32Client-" + String(random(0xffff), HEX);
 
     if (client.connect(clientId.c_str(), mqtt_user, mqtt_pass, topic_status, 1, true, "OFFLINE")) {
-      Serial.println("connected to HiveMQ!");
+      Serial.println("connected to Java MQTT broker");
       client.publish(topic_status, "ONLINE", true);
-      client.publish("sensor/status", "ONLINE", true);
       client.subscribe(topic_led);
-      client.subscribe("sensor/led");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -114,6 +111,8 @@ void setup() {
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
   client.setBufferSize(256);
+  client.setKeepAlive(15);
+  client.setSocketTimeout(5);
 }
 
 void loop() {
@@ -139,8 +138,8 @@ void loop() {
     }
 
     StaticJsonDocument<128> doc;
-    doc["temp"] = serialized(String(data.temperature, 1));
-    doc["hum"] = serialized(String(data.humidity, 1));
+    doc["temp"] = data.temperature;
+    doc["hum"] = data.humidity;
 
     char buffer[128];
     serializeJson(doc, buffer);
@@ -148,9 +147,11 @@ void loop() {
     Serial.print("Publishing to sensor/data: ");
     Serial.println(buffer);
 
-    client.publish(topic_data, buffer);
-    client.publish("sensor/data", buffer);
-    client.publish(topic_status, "ONLINE", true);
-    client.publish("sensor/status", "ONLINE", true);
+    if (!client.publish(topic_data, buffer)) {
+      Serial.println("Publish to sensor/data failed");
+    }
+    if (!client.publish(topic_status, "ONLINE", true)) {
+      Serial.println("Publish to sensor/status failed");
+    }
   }
 }
