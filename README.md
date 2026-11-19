@@ -29,7 +29,7 @@ Phần cứng giả lập: DHT22 ở GPIO16, LED ở GPIO4 (điện trở 220 Oh
 
 | Topic | Hướng | Payload | Ghi chú |
 |---|---|---|---|
-| `sensor/data` | ESP32 -> broker -> client | `{"temp":28.5,"hum":65.0}` | Số thật, gửi mỗi 3000 ms |
+| `sensor/data` | ESP32 -> broker -> client | `{"temp":28.5,"hum":65}` | Số thật (làm tròn 1 chữ số thập phân; số nguyên in không có `.0`), gửi mỗi 3000 ms |
 | `sensor/led` | client -> broker -> ESP32 | `ON` / `OFF` | Điều khiển LED GPIO4 |
 | `sensor/status` | ESP32 -> broker -> client | `ONLINE` / `OFFLINE` | Retained; `OFFLINE` là Will |
 
@@ -39,7 +39,7 @@ Tài khoản demo `user1` / `123456` (cấu hình được).
 
 ```powershell
 mvn clean verify
-Copy-Item config\client.example.properties config\client.properties   # sửa host= thành IPv4 Wi-Fi của máy này
+Copy-Item config\client.example.properties config\client.properties   # sửa host= thành IPv4 của adapter mạng thật (Wi-Fi hoặc Ethernet) của máy này
 Copy-Item esp32_wokwi\broker_config.example.h esp32_wokwi\broker_config.h
 scripts\start_java_broker.bat          # terminal 1
 pio run -e esp32doit-devkit-v1         # build firmware; sau đó F1 -> Wokwi: Start Simulator

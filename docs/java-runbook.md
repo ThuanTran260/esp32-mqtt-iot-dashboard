@@ -6,7 +6,7 @@ Luồng dữ liệu: `ESP32 (Wokwi, PubSubClient)` ⇄ `broker Java tự viết 
 
 | Topic | Payload | Ghi chú |
 |---|---|---|
-| `sensor/data` | `{"temp":28.5,"hum":65.0}` | ESP32 gửi mỗi 3000 ms, số thật (không phải chuỗi) |
+| `sensor/data` | `{"temp":28.5,"hum":65}` | ESP32 gửi mỗi 3000 ms, số thật (không phải chuỗi), làm tròn 1 chữ số thập phân; số nguyên in không có `.0` |
 | `sensor/led` | `ON` / `OFF` | Client gửi, ESP32 nhận, điều khiển LED GPIO4 |
 | `sensor/status` | `ONLINE` / `OFFLINE` | Retained; `OFFLINE` là Will của ESP32 |
 
@@ -35,7 +35,7 @@ Kết quả mong đợi: `BUILD SUCCESS`, tạo `java-broker/target/java-broker-
 ipconfig
 ```
 
-Chọn adapter **Wi-Fi** (hoặc hotspot) đang kết nối mạng demo, lấy dòng `IPv4 Address`. **Bỏ qua** các adapter ảo: `vEthernet (...)`, VPN, VirtualBox / VMware, địa chỉ `169.254.x.x`. Khi broker khởi động, nó cũng in danh sách IPv4 của máy để đối chiếu.
+Chọn adapter mạng thật (**Wi-Fi hoặc Ethernet**, hoặc hotspot) đang kết nối mạng demo, lấy dòng `IPv4 Address`. **Bỏ qua** các adapter ảo: `vEthernet (...)`, VPN, VirtualBox / VMware, địa chỉ `169.254.x.x`. Khi broker khởi động, nó cũng in danh sách IPv4 của máy để đối chiếu.
 
 Không bao giờ nhập `0.0.0.0` vào cấu hình client hoặc firmware. `0.0.0.0` chỉ là địa chỉ bind của broker (lắng nghe mọi adapter).
 
@@ -78,7 +78,7 @@ Tất cả chạy trên **máy Wokwi**: broker, Wokwi simulator và CLI.
 
 3. **Wokwi:** trong VS Code nhấn `F1` rồi chọn **Wokwi: Start Simulator** (workspace root có `wokwi.toml` trỏ tới `.pio/build/esp32doit-devkit-v1/firmware.bin`). Serial monitor phải hiện `connected to Java MQTT broker`.
 
-4. **Client:** sửa `config/client.properties`, đặt `host=<IPv4 Wi-Fi của máy này>` (lấy ở mục 1.3). Không dùng `0.0.0.0`.
+4. **Client:** sửa `config/client.properties`, đặt `host=<IPv4 adapter mạng thật của máy này (Wi-Fi hoặc Ethernet)>` (lấy ở mục 1.3). Không dùng `0.0.0.0`.
 
 5. **Terminal 2, xem dữ liệu:**
 
@@ -134,7 +134,9 @@ scripts\start_java_broker.bat
 
 Ghi lại IPv4 hotspot của máy này (mục 1.3). Đây là `<IP broker>` dùng cho hai máy còn lại.
 
-**Firewall (chạy PowerShell với quyền Administrator).** Rule chỉ cho phép subnet hotspot, không tắt firewall và không mở mọi địa chỉ:
+**Lần đầu Java lắng nghe, Windows Defender Firewall hiện hộp thoại "Allow access".** Bấm **Cancel** (không tick Public/Private), vì lựa chọn đó tạo rule cho `java.exe` mở cho cả mạng. Nếu lỡ cho phép, xoá rule tự tạo (tên thường là "OpenJDK Platform binary" hoặc "java.exe") trong Windows Defender Firewall with Advanced Security. Chỉ dựa vào rule thủ công giới hạn subnet bên dưới.
+
+**Firewall (chạy trong một cửa sổ PowerShell Administrator riêng).** `scripts\start_java_broker.bat` giữ cửa sổ terminal của nó cho tới khi broker dừng, nên đừng gõ lệnh firewall vào đó. Rule chỉ cho phép subnet hotspot, không tắt firewall và không mở mọi địa chỉ:
 
 ```powershell
 $brokerLanAddress = Read-Host 'IPv4 cua may broker tren hotspot'
