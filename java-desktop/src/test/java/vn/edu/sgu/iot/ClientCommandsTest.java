@@ -269,11 +269,11 @@ class ClientCommandsTest {
     }
 
     @Test
-    void dashboardIsNotAvailableYet() {
+    void dashboardModeIsRejectedWithAClearMessage() {
         var transport = new FakeTransport();
         int code = ClientCommands.run(ClientOptions.parse(new String[]{"dashboard"}), transport, out, err);
         assertEquals(2, code);
-        assertEquals("Dashboard UI is not available yet; use check/subscribe/publish", err().strip());
+        assertEquals("Dashboard mode is started by ClientMain, not by ClientCommands", err().strip());
         assertNull(transport.listener);
     }
 }

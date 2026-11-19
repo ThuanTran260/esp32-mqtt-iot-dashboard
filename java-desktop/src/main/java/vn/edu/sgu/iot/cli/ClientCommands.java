@@ -18,8 +18,8 @@ import vn.edu.sgu.iot.mqtt.MqttTransport;
 
 /** Runs one CLI mode against a transport. Never calls {@code System.exit}; returns the exit code. */
 public final class ClientCommands {
-    public static final String DASHBOARD_UNAVAILABLE =
-        "Dashboard UI is not available yet; use check/subscribe/publish";
+    private static final String DASHBOARD_NOT_HANDLED =
+        "Dashboard mode is started by ClientMain, not by ClientCommands";
 
     private static final long CONNECT_TIMEOUT_SECONDS = 5;
     private static final long PUBLISH_TIMEOUT_SECONDS = 5;
@@ -40,7 +40,7 @@ public final class ClientCommands {
     public static int run(ClientOptions options, MqttTransport transport, PrintStream out,
                           PrintStream err, CountDownLatch stop) {
         if (options.mode().equals("dashboard")) {
-            err.println(DASHBOARD_UNAVAILABLE);
+            err.println(DASHBOARD_NOT_HANDLED);
             return 2;
         }
         ConnectionSettings settings;
