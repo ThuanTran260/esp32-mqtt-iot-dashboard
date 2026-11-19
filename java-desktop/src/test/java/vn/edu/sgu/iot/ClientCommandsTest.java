@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import vn.edu.sgu.iot.cli.ClientCommands;
 import vn.edu.sgu.iot.cli.ClientOptions;
+import vn.edu.sgu.iot.mqtt.ConnectionState;
 
 class ClientCommandsTest {
     @TempDir
@@ -94,6 +95,18 @@ class ClientCommandsTest {
         assertEquals("Authentication failed", err().strip());
         assertFalse(err().contains("s3cret"));
         assertFalse(out().contains("s3cret"));
+    }
+
+    @Test
+    void connectionClosedByBrokerIsReportedReadablyWithExitOne() {
+        var transport = new FakeTransport();
+        transport.failConnect = true;
+        transport.errorMessage =
+            "Connection closed by broker at 192.168.43.100:1883 (is this an MQTT broker?)";
+        assertEquals(1, ClientCommands.run(options("check"), transport, out, err));
+        assertEquals("Connection closed by broker at 192.168.43.100:1883 (is this an MQTT broker?)",
+            err().strip());
+        assertEquals("", out());
     }
 
     @Test
@@ -197,6 +210,42 @@ class ClientCommandsTest {
         assertEquals(2, lines.size(), out());
         assertTrue(lines.get(0).matches("\\d\\d:\\d\\d:\\d\\d sensor/data \\{\"temp\":28\\.5}"), lines.get(0));
         assertTrue(lines.get(1).matches("\\d\\d:\\d\\d:\\d\\d sensor/status line1\\\\nline2"), lines.get(1));
+    }
+
+    @Test
+    void subscribePrintsConnectionStateChangesToStderr() throws Exception {
+        var transport = new FakeTransport();
+        var stop = new CountDownLatch(1);
+        var thread = new Thread(() -> {
+            while (transport.listener == null) {
+                Thread.onSpinWait();
+            }
+            transport.listener.onConnection(ConnectionState.RECONNECTING);
+            transport.listener.onConnection(ConnectionState.CONNECTED);
+            transport.listener.onConnection(ConnectionState.RECONNECTING);
+            transport.listener.onError("Cannot reach broker at 192.168.43.100:1883");
+            transport.listener.onConnection(ConnectionState.ERROR);
+            stop.countDown();
+        });
+        thread.start();
+        int code = ClientCommands.run(options("subscribe", "--seconds", "5"), transport, out, err, stop);
+        thread.join();
+        assertEquals(0, code);
+        var lines = err().strip().lines().toList();
+        assertEquals(List.of(
+            "Listening on sensor/# for 5 s",
+            "Connection lost, reconnecting to 192.168.43.100:1883",
+            "Reconnected to 192.168.43.100:1883",
+            "Connection lost, reconnecting to 192.168.43.100:1883",
+            "Cannot reach broker at 192.168.43.100:1883"), lines);
+        assertEquals("", out());
+    }
+
+    @Test
+    void checkDoesNotPrintStateLinesOnSuccess() {
+        var transport = new FakeTransport();
+        ClientCommands.run(options("check"), transport, out, err);
+        assertEquals("", err());
     }
 
     @Test

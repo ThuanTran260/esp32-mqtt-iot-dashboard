@@ -64,8 +64,15 @@ public final class ClientCommands {
         var listener = new MqttTransport.Listener() {
             @Override
             public void onConnection(ConnectionState state) {
+                // The first CONNECTED is reported by the mode itself; later changes (broker died, came
+                // back) would otherwise leave a subscriber silent until --seconds runs out. A failed
+                // reconnect (ERROR) is reported through onError.
                 if (state == ConnectionState.CONNECTED) {
-                    connected.set(true);
+                    if (connected.getAndSet(true)) {
+                        err.println("Reconnected to " + settings.host() + ":" + settings.port());
+                    }
+                } else if (state == ConnectionState.RECONNECTING && connected.get()) {
+                    err.println("Connection lost, reconnecting to " + settings.host() + ":" + settings.port());
                 }
             }
 

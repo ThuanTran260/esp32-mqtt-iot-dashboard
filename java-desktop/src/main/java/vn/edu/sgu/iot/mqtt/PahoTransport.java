@@ -417,6 +417,8 @@ public final class PahoTransport implements MqttTransport {
                          MqttException.REASON_CODE_CONNECT_IN_PROGRESS ->
                         "Timed out connecting to " + where;
                     case MqttException.REASON_CODE_SUBSCRIBE_FAILED -> "Broker refused the subscription";
+                    case MqttException.REASON_CODE_CONNECTION_LOST ->
+                        "Connection closed by broker at " + where + " (is this an MQTT broker?)";
                     default -> "MQTT error (reason code " + mqtt.getReasonCode() + ")";
                 };
             }

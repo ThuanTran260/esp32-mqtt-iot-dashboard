@@ -246,6 +246,41 @@ class PahoTransportTest {
         }
     }
 
+    /**
+     * Accepts connections and closes each after a pause: something that listens but is not an MQTT
+     * broker. The pause matters: closing at once (or after a few hundred ms) can leave Paho 1.2.5's
+     * connect thread spinning in {@code CommsReceiver.start}, a daemon thread that would trip the
+     * thread-leak assertions of the other tests in this JVM.
+     */
+    @Test
+    void serverThatClosesTheSocketGivesReadableError() throws Exception {
+        try (var server = new ServerSocket(0, 50, InetAddress.getLoopbackAddress());
+             var transport = new PahoTransport()) {
+            var acceptor = new Thread(() -> {
+                try {
+                    while (true) {
+                        Socket socket = server.accept();
+                        Thread.sleep(1000);
+                        socket.close();
+                    }
+                } catch (IOException | InterruptedException ignored) {
+                    // closed
+                }
+            }, "closing-server");
+            acceptor.setDaemon(true);
+            acceptor.start();
+            var listener = new Recorder();
+            var settings = new ConnectionSettings("127.0.0.1", server.getLocalPort(), "user1", "123456");
+            failureOf(transport.connect(settings, listener).toCompletableFuture(), 6);
+            String error = listener.errors.poll(2, TimeUnit.SECONDS);
+            assertNotNull(error);
+            assertEquals("Connection closed by broker at 127.0.0.1:" + server.getLocalPort()
+                + " (is this an MQTT broker?)", error);
+            assertFalse(error.contains("reason code"), error);
+            assertTrue(awaitNoTransportThreads(3), "Paho client must be shut down: " + transportThreads());
+        }
+    }
+
     @Test
     void publishDeliversAndFailsWhenOffline() throws Exception {
         try (var fixture = LocalBrokerFixture.open(); var transport = new PahoTransport()) {
