@@ -138,3 +138,18 @@ Bổ sung test socket thật và client Paho độc lập để tránh encoder/d
 ## Sửa đổi phạm vi MVP (2026-11-14)
 
 Người dùng duyệt làm MVP trước. Phiên bản đầu **hoãn** các mục sau: QoS1 outbound (mọi subscription được cấp QoS0, PUBLISH QoS1 vào vẫn được PUBACK), pending ID, giới hạn 32 client, queue 256/pending 128, deadline gói tuyệt đối, chống slow client. Will và keepalive 1.5× vẫn bắt buộc. Trước khi viết firmware LAN phải có spike chứng minh Wokwi mở được TCP tới máy broker.
+
+## Giai đoạn 2: chạy 1 máy trước, 3 máy chỉ đổi IP (2026-11-19)
+
+Bối cảnh: A1–A4 của broker đã xong và đã push (`ace2b28`). Hiện người dùng chỉ có một máy và đang ở mạng Wi-Fi khác; buổi demo chính thức vẫn là ba máy tách biệt, trong đó ESP32 (Wokwi) và broker Java nằm ở hai máy khác nhau.
+
+Quyết định:
+
+- **Hai chế độ, cùng một bản code.** Chế độ 1 máy: broker, Wokwi và client Java chạy trên cùng máy; ESP32 tới broker qua `host.wokwi.internal`, client Java tới broker qua IPv4 Wi-Fi của chính máy đó (không dùng `localhost`, để đi qua card mạng). Chế độ 3 máy: chỉ đổi địa chỉ broker trong `esp32_wokwi/broker_config.h` và `config/client.properties`; không sửa code.
+- **CLI Java trước, Swing sau.** Client Java đầu tiên là CLI `check` / `subscribe` / `publish` dùng Paho. Swing (plan B: B2, B3) làm sau khi chế độ 1 máy chạy được.
+- **Vai trò gọi theo tên**, không theo số: máy broker, máy Wokwi, máy dashboard.
+- **Rủi ro còn mở:** chưa chứng minh Wokwi VS Code tới được IPv4 của máy khác. Chế độ 1 máy không chứng minh điều này; runbook 3 máy phải có bước kiểm tra riêng trước khi demo.
+- Cấu hình broker dùng các khóa đã có trong code: `bindAddress`, `port`, `username`, `password`; khóa thiếu lấy giá trị mặc định demo.
+- Mã cũ (Mosquitto, web dashboard, script, test Python) đã bị xóa theo yêu cầu người dùng; tài liệu mới không còn mục legacy.
+
+Ngoài phạm vi giai đoạn 2: Swing dashboard, QoS1 outbound, giới hạn client/queue (đã hoãn ở MVP).
