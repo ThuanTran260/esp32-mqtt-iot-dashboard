@@ -11,6 +11,7 @@
 
   <modules>
     <module>java-broker</module>
+    <module>java-desktop</module>
   </modules>
 
   <properties>
