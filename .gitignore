@@ -30,3 +30,8 @@ wokwigw.exe
 
 # Maven build output
 **/target/
+
+# Local, per-machine settings (copy from the *.example files)
+config/broker.properties
+config/client.properties
+esp32_wokwi/broker_config.h
