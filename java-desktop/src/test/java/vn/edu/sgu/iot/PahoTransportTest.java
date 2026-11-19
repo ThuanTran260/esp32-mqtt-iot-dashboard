@@ -8,13 +8,17 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
+import java.net.InetAddress;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -98,6 +102,45 @@ class PahoTransportTest {
             .map(Thread::getName)
             .filter(name -> name.startsWith("MQTT ") && name.contains("java-ui-"))
             .toList();
+    }
+
+    /** Accepts TCP connections and never answers: a broker that hangs before CONNACK. */
+    private static final class SilentServer implements AutoCloseable {
+        private final ServerSocket server;
+        private final List<Socket> accepted = new CopyOnWriteArrayList<>();
+
+        SilentServer(int port) throws IOException {
+            server = new ServerSocket(port, 50, InetAddress.getLoopbackAddress());
+            var thread = new Thread(() -> {
+                try {
+                    while (true) accepted.add(server.accept());
+                } catch (IOException ignored) {
+                    // closed
+                }
+            }, "silent-server");
+            thread.setDaemon(true);
+            thread.start();
+        }
+
+        int port() {
+            return server.getLocalPort();
+        }
+
+        /** Stops listening but keeps already accepted sockets open (and silent). */
+        void stopAccepting() throws IOException {
+            server.close();
+        }
+
+        @Override
+        public void close() throws IOException {
+            server.close();
+            for (Socket socket : accepted) socket.close();
+        }
+    }
+
+    private static boolean awaitNoTransportThreads(long seconds) throws InterruptedException {
+        await(() -> transportThreads().isEmpty(), seconds);
+        return transportThreads().isEmpty();
     }
 
     private static void await(BooleanSupplier condition, long seconds) throws InterruptedException {
@@ -278,6 +321,79 @@ class PahoTransportTest {
             assertEquals(0, fixture.server().router().subscriberCount(), "must not reconnect");
             assertEquals(List.of(), transportThreads(), "no reconnect: Paho client must be shut down");
             assertFalse(transport.isConnected());
+        }
+    }
+
+    @Test
+    void serverThatNeverSendsConnackFailsWithinSixSeconds() throws Exception {
+        try (var silent = new SilentServer(0); var transport = new PahoTransport()) {
+            var listener = new Recorder();
+            var settings = new ConnectionSettings("127.0.0.1", silent.port(), "user1", "123456");
+            long start = System.nanoTime();
+            var future = transport.connect(settings, listener).toCompletableFuture();
+            failureOf(future, 7);
+            assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) <= 6000, "connect must give up in 6 s");
+            assertFalse(transport.isConnected());
+            assertTrue(listener.awaitState(ConnectionState.ERROR, 2));
+            String error = listener.errors.poll(2, TimeUnit.SECONDS);
+            assertNotNull(error);
+            assertTrue(error.toLowerCase().contains("timed out"), error);
+            assertTrue(awaitNoTransportThreads(3), "Paho client must be shut down: " + transportThreads());
+        }
+    }
+
+    @Test
+    void disconnectDuringInFlightConnectLeavesNoThreads() throws Exception {
+        try (var silent = new SilentServer(0); var transport = new PahoTransport()) {
+            var settings = new ConnectionSettings("127.0.0.1", silent.port(), "user1", "123456");
+            var future = transport.connect(settings, new Recorder()).toCompletableFuture();
+            Thread.sleep(500);
+            transport.disconnect().toCompletableFuture().get(5, TimeUnit.SECONDS);
+            assertTrue(future.isDone());
+            assertTrue(awaitNoTransportThreads(3), "leaked: " + transportThreads());
+        }
+    }
+
+    @Test
+    void closeDuringInFlightConnectLeavesNoThreads() throws Exception {
+        try (var silent = new SilentServer(0)) {
+            var transport = new PahoTransport();
+            var settings = new ConnectionSettings("127.0.0.1", silent.port(), "user1", "123456");
+            transport.connect(settings, new Recorder());
+            Thread.sleep(500);
+            transport.close();
+            assertTrue(awaitNoTransportThreads(3), "leaked: " + transportThreads());
+        }
+    }
+
+    @Test
+    void disconnectDuringInFlightReconnectLeavesNoThreads() throws Exception {
+        try (var fixture = LocalBrokerFixture.open(); var transport = new PahoTransport()) {
+            var listener = new Recorder();
+            transport.connect(fixture.settings(), listener).toCompletableFuture().get(3, TimeUnit.SECONDS);
+            fixture.stop();
+            try (var silent = new SilentServer(fixture.port())) {
+                assertTrue(listener.awaitState(ConnectionState.RECONNECTING, 5));
+                Thread.sleep(2000); // the 1 s retry is now stuck waiting for a CONNACK
+                transport.disconnect().toCompletableFuture().get(5, TimeUnit.SECONDS);
+                assertTrue(awaitNoTransportThreads(3), "leaked: " + transportThreads());
+            }
+        }
+    }
+
+    @Test
+    void reconnectAttemptStuckWithoutConnackIsAbortedAndRetried() throws Exception {
+        try (var fixture = LocalBrokerFixture.open(); var transport = new PahoTransport()) {
+            var listener = new Recorder();
+            transport.connect(fixture.settings(), listener).toCompletableFuture().get(3, TimeUnit.SECONDS);
+            fixture.stop();
+            try (var silent = new SilentServer(fixture.port())) {
+                assertTrue(listener.awaitState(ConnectionState.RECONNECTING, 5));
+                Thread.sleep(7000); // longer than the per-attempt deadline; accepted sockets stay silent
+                silent.stopAccepting();
+                fixture.start();
+                assertTrue(listener.awaitState(ConnectionState.CONNECTED, 15), "should recover once a broker is back");
+            }
         }
     }
 

@@ -9,8 +9,10 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -38,6 +40,8 @@ public final class PahoTransport implements MqttTransport {
     private static final Logger LOG = Logger.getLogger(PahoTransport.class.getName());
     private static final int SUBACK_FAILURE = 0x80;
     private static final int CONNECT_TIMEOUT_SECONDS = 5;
+    /** Paho's connection timeout only covers the socket; this covers CONNACK and SUBACK too. */
+    private static final long ATTEMPT_DEADLINE_MILLIS = 5000;
     private static final int KEEP_ALIVE_SECONDS = 15;
     private static final long DISCONNECT_WAIT_MILLIS = 2000;
     private static final long RECONNECT_INITIAL_DELAY_MILLIS = 1000;
@@ -195,6 +199,8 @@ public final class PahoTransport implements MqttTransport {
         volatile MqttAsyncClient client;
         private MqttConnectOptions options; // worker thread only
         private final AtomicInteger reconnectAttempts = new AtomicInteger();
+        private final AtomicBoolean reconnectPending = new AtomicBoolean();
+        private volatile ScheduledFuture<?> deadline;
 
         Session(ConnectionSettings settings, Listener listener) {
             this.settings = settings;
@@ -225,6 +231,7 @@ public final class PahoTransport implements MqttTransport {
                     settings.uri(), "java-ui-" + UUID.randomUUID(), new MemoryPersistence());
                 created.setCallback(this);
                 client = created;
+                armDeadline();
                 created.connect(options, null, new IMqttActionListener() {
                     @Override
                     public void onSuccess(IMqttToken token) {
@@ -243,6 +250,9 @@ public final class PahoTransport implements MqttTransport {
 
         /** Schedules the next reconnect attempt with a capped exponential backoff. */
         private void scheduleReconnect() {
+            if (!reconnectPending.compareAndSet(false, true)) {
+                return; // an abort and a connection failure can both ask for a retry
+            }
             int attempt = reconnectAttempts.getAndIncrement();
             long delay = Math.min(RECONNECT_INITIAL_DELAY_MILLIS << Math.min(attempt, 10),
                 RECONNECT_MAX_DELAY_MILLIS);
@@ -255,10 +265,12 @@ public final class PahoTransport implements MqttTransport {
 
         /** Worker thread: one reconnect attempt on the same Paho client (clean session). */
         private void reconnect() {
+            reconnectPending.set(false);
             MqttAsyncClient c = client;
             if (c == null || !isCurrent()) {
                 return;
             }
+            armDeadline();
             try {
                 c.connect(options, null, new IMqttActionListener() {
                     @Override
@@ -319,6 +331,7 @@ public final class PahoTransport implements MqttTransport {
                                 }
                             }
                         }
+                        disarmDeadline();
                         reconnectAttempts.set(0);
                         emit(ConnectionState.CONNECTED);
                         firstConnection.complete(null);
@@ -334,6 +347,48 @@ public final class PahoTransport implements MqttTransport {
             }
         }
 
+        /** Starts (or restarts) the time limit for CONNACK plus SUBACK of the current attempt. */
+        private void armDeadline() {
+            disarmDeadline();
+            try {
+                deadline = worker.schedule(this::onDeadline, ATTEMPT_DEADLINE_MILLIS, TimeUnit.MILLISECONDS);
+            } catch (RejectedExecutionException ex) {
+                // transport closed meanwhile
+            }
+        }
+
+        private void disarmDeadline() {
+            ScheduledFuture<?> pending = deadline;
+            if (pending != null) {
+                pending.cancel(false);
+            }
+        }
+
+        /** Worker thread: the broker accepted the socket but did not finish the handshake in time. */
+        private void onDeadline() {
+            if (!isCurrent()) {
+                return;
+            }
+            if (!firstConnection.isDone()) {
+                fail(new MqttException(MqttException.REASON_CODE_CLIENT_TIMEOUT));
+                return;
+            }
+            MqttAsyncClient c = client;
+            if (c != null) {
+                abort(c);
+                scheduleReconnect(); // no-op when the abort already surfaced as a failure
+            }
+        }
+
+        /** Kills an in-flight connect or a half-open connection without waiting for the broker. */
+        private void abort(MqttAsyncClient c) {
+            try {
+                c.disconnectForcibly(0, 0, false);
+            } catch (MqttException | RuntimeException ex) {
+                LOG.log(Level.FINE, "Forced disconnect failed", ex);
+            }
+        }
+
         /** Reports the error once, retires this session (no retry loop) and fails the connect future. */
         private void fail(Throwable error) {
             synchronized (lock) {
@@ -345,9 +400,7 @@ public final class PahoTransport implements MqttTransport {
             emit(ConnectionState.ERROR);
             safely(() -> listener.onError(describe(error)));
             firstConnection.completeExceptionally(error);
-            if (!worker.isShutdown()) {
-                worker.execute(() -> teardown(false));
-            }
+            runOnWorker(() -> teardown(false));
         }
 
         /** Never includes the password: only host, port and Paho's reason code are used. */
@@ -372,6 +425,7 @@ public final class PahoTransport implements MqttTransport {
 
         /** Worker thread. Stops Paho (including any reconnect cycle) and optionally reports DISCONNECTED. */
         void teardown(boolean reportDisconnected) {
+            disarmDeadline();
             MqttAsyncClient c = client;
             client = null;
             firstConnection.completeExceptionally(new IllegalStateException("Disconnected"));
@@ -383,6 +437,9 @@ public final class PahoTransport implements MqttTransport {
                 } catch (MqttException | RuntimeException ex) {
                     LOG.log(Level.FINE, "Graceful disconnect failed", ex);
                 }
+                // disconnect() cannot help while a connect is in flight, and close() would then throw
+                // CONNECT_IN_PROGRESS and leave the client (and its threads) behind.
+                abort(c);
                 try {
                     c.close(true);
                 } catch (MqttException | RuntimeException ex) {
@@ -391,6 +448,14 @@ public final class PahoTransport implements MqttTransport {
             }
             if (reportDisconnected) {
                 emit(ConnectionState.DISCONNECTED);
+            }
+        }
+
+        private void runOnWorker(Runnable task) {
+            try {
+                worker.execute(task);
+            } catch (RejectedExecutionException ex) {
+                // transport closed meanwhile
             }
         }
 
@@ -410,9 +475,7 @@ public final class PahoTransport implements MqttTransport {
         public void connectionLost(Throwable cause) {
             if (isCurrent()) {
                 emit(ConnectionState.RECONNECTING);
-                if (!worker.isShutdown()) {
-                    worker.execute(this::scheduleReconnect);
-                }
+                runOnWorker(this::scheduleReconnect);
             }
         }
 
