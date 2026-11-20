@@ -63,5 +63,5 @@ Chạy 3 máy: xem [HUONG_DAN_CHAY_3_MAY.md](HUONG_DAN_CHAY_3_MAY.md) và runboo
 - Không có QoS 1 chiều từ broker xuống client: mọi subscription được cấp QoS 0.
 - Không có TLS, không có WebSocket.
 - Tin retained mất khi khởi động lại broker.
-- Chưa có Swing dashboard; hiện dùng CLI Java.
+- Đã có Swing dashboard: sau khi build, chạy `java -jar java-desktop/target/java-desktop-1.0-SNAPSHOT.jar dashboard`. Layout cửa sổ chưa kiểm tra trên màn hình thật. CLI Java (`check`, `subscribe`, `publish`) vẫn dùng được.
 - Chưa có bằng chứng chạy 3 máy thật. Kết quả kiểm tra 1 máy: `docs/validation/single-machine-results.md`.

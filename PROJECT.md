@@ -55,10 +55,9 @@ File cục bộ không commit: `config/broker.properties`, `config/client.proper
 - Không có QoS 1 chiều từ broker xuống client (mọi grant là QoS 0).
 - Không có TLS, không có WebSocket.
 - Tin retained mất khi khởi động lại broker.
-- Chưa có Swing dashboard (dự kiến ở các task B2/B3 của plan `2026-11-14-java-desktop-hotspot.md`).
+- Đã có Swing dashboard (xem plan `2026-11-14-java-desktop-hotspot.md`). Layout cửa sổ chưa kiểm tra trên màn hình thật.
 
 ## Việc tiếp theo
 
-1. Swing dashboard (model + UI), bật lại mode `dashboard` của CLI.
-2. Nghiệm thu 3 máy theo runbook phần 3, lưu `docs/validation/YYYY-MM-DD-three-machine-results.md` với ngày chạy thật.
-3. Các lỗi nhỏ đã hoãn (xem plan).
+1. Nghiệm thu 3 máy theo runbook phần 3, lưu `docs/validation/YYYY-MM-DD-three-machine-results.md` với ngày chạy thật.
+2. Các lỗi nhỏ đã hoãn (xem plan).

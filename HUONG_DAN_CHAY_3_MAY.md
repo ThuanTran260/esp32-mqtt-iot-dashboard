@@ -35,6 +35,6 @@ Nếu ESP32 log `failed, rc=-2` liên tục trong khi `Test-NetConnection` trên
 
 ## 4. Ghi chú
 
-- Chưa có Swing dashboard; máy dashboard hiện dùng CLI Java.
+- Máy dashboard có thể dùng Swing dashboard (`java -jar java-desktop/target/java-desktop-1.0-SNAPSHOT.jar dashboard`) hoặc CLI Java. Layout cửa sổ chưa kiểm tra trên màn hình thật.
 - Giới hạn MVP: không QoS 1 chiều xuống client, không TLS/WebSocket, retained mất khi restart broker.
 - Chỉ ghi "3 máy pass" khi có bằng chứng từ ba máy thật (`docs/validation/YYYY-MM-DD-three-machine-results.md`).
