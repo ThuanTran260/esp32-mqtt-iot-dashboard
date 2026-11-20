@@ -118,7 +118,7 @@ Vai trò (gọi theo tên, không theo số):
 
 - **Máy broker:** chạy broker Java, mở firewall cho TCP 1883.
 - **Máy Wokwi:** có PlatformIO + Wokwi, chạy ESP32 mô phỏng. Đây là máy đã cài sẵn toolchain nên không đổi vai trò.
-- **Máy dashboard/client:** chạy `subscribe_java.bat`, `publish_led.bat`, `check_java_connection.bat`. (Swing dashboard chưa có; hiện tại dùng CLI.)
+- **Máy dashboard/client:** chạy `subscribe_java.bat`, `publish_led.bat`, `check_java_connection.bat`. Swing dashboard đã có, chạy bằng `java -jar java-desktop/target/java-desktop-1.0-SNAPSHOT.jar dashboard` (layout cửa sổ chưa kiểm tra trên màn hình thật).
 
 Cả ba máy dùng **cùng commit** (`git rev-parse HEAD`) và nối cùng một mạng (hotspot). Hotspot có thể bật chế độ cô lập client (client isolation), khi đó các máy không thấy nhau dù cùng SSID.
 
@@ -213,5 +213,5 @@ Wokwi gateway hỗ trợ TCP/UDP nhưng không hỗ trợ ICMP, nên `ping` khô
 - Không có QoS 1 chiều từ broker xuống client: mọi subscription được cấp QoS 0.
 - Không có TLS và không có WebSocket.
 - Tin retained (ví dụ `sensor/status`) chỉ nằm trong bộ nhớ, mất khi khởi động lại broker.
-- Chưa có Swing dashboard; CLI Java (`check`, `subscribe`, `publish`) là client hiện tại.
+- Đã có Swing dashboard (layout cửa sổ chưa kiểm tra trên màn hình thật). CLI Java (`check`, `subscribe`, `publish`) vẫn dùng được.
 - Kết quả kiểm tra: `docs/validation/single-machine-results.md`. Chỉ ghi "3 máy pass" khi có bằng chứng từ ba máy thật (tạo `docs/validation/YYYY-MM-DD-three-machine-results.md` với ngày chạy thật).
